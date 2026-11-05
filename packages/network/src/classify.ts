@@ -715,6 +715,17 @@ export function parseProbeReply(body: string, options: readonly TimeOption[] = [
   // "Any of them" (not refused, not a request for other days): every option the member did not rule out.
   const allAt = ALL.exec(t) ?? ALL_WEAK.exec(t);
   if (allAt && c.answer !== "counter" && !negatedAt(t, allAt.index, allAt[0].length)) return open.length ? { answer: "yes", keys: open, why: c.why } : unclear;
+  // A day or clock time the member names that the probe does not offer is a counter ("Friday works"
+  // when the probe offers Thursday, Saturday and Sunday): a yes to something else, never a yes to
+  // every option. onProbeAnswer reads a yes with no keys as "none of those times fit" and offers new
+  // times (PRD 29 consent flow; issue #134).
+  if (!picked.length && c.answer === "yes") {
+    const unlistedDay = DAY_WORDS.some(([re, name]) =>
+      !options.some(o => o.label.startsWith(name)) && [...t.matchAll(re)].length > 0);
+    const unlistedHour = [...t.matchAll(/(\d{1,2})(?::\d\d)?\s*(am|pm)/g)]
+      .some(m => !options.some(o => o.label.endsWith(` ${Number(m[1])}${m[2]}`)));
+    if (unlistedDay || unlistedHour) return { answer: "yes", keys: [], why: "counter" };
+  }
   if (c.answer === "yes") return { answer: "yes", keys: open, why: c.why };
   if (c.answer === "counter") return { answer: "yes", keys: [], why: c.why };
   // Only refusals ("Thursday doesn't work") are not a yes: the probe stays open for a clear answer.
